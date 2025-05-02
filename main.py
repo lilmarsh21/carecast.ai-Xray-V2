@@ -28,6 +28,8 @@ async def upload_image(
     file: UploadFile = File(...),
     x_api_key: str = Header(...)
 ):
+    print("SECRET_KEY:", SECRET_KEY)
+
     if x_api_key != SECRET_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
 
