@@ -43,7 +43,7 @@ async def upload_image(
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4-vision-preview",
+            model="gpt-4-vision",
             messages=[
                 {
                     "role": "system",
