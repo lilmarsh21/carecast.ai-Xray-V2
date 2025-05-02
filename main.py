@@ -1,6 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
@@ -19,17 +19,18 @@ app.add_middleware(
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],  # includes X-API-KEY
+    allow_headers=["*"],
 )
 
-# ✅ Upload + Analyze
+# 🧠 Store reports per session (in-memory)
+last_reports = {}
+
+# ✅ Upload & Analyze
 @app.post("/upload/")
 async def upload_image(
     file: UploadFile = File(...),
     x_api_key: str = Header(...)
 ):
-    print("SECRET_KEY:", SECRET_KEY)
-
     if x_api_key != SECRET_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -41,36 +42,25 @@ async def upload_image(
     image_base64 = base64.b64encode(image_data).decode("utf-8")
     image_url = f"data:{mime_type};base64,{image_base64}"
 
+    system_prompt = (
+        "You are a clinical radiologist AI. You are being shown an X-ray, MRI, or medical image, and your job is to provide a full analysis. "
+        "You must always respond with a structured diagnostic report — even if the findings are normal or limited.\n\n"
+        "Format your response using these exact sections:\n"
+        "- Findings\n- Impression\n- Explanation\n- Recommended Care Plan\n\n"
+        "Always give a response. Do not say you cannot analyze. If image quality is poor, still attempt a limited assessment.\n"
+        "End with: 'This is an AI-generated report. Please consult a licensed medical professional for final diagnosis and treatment.'"
+    )
+
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-    "You are a clinical radiologist AI. You are being shown an X-ray, MRI, or medical image, and your job is to provide a full analysis. "
-    "You must always respond with a structured diagnostic report — even if the findings are normal or limited.\n\n"
-    "Format your response using these exact sections:\n"
-    "- Findings: Describe all visible structures, whether normal or abnormal.\n"
-    "- Impression: Summarize the most important clinical takeaway.\n"
-    "- Explanation: Explain what was found and possible causes (trauma, disease, etc).\n"
-    "- Recommended Care Plan: Include next steps, referrals, or treatment recommendations.\n\n"
-    "Always give a response. Do not say you cannot analyze. If image quality is poor, still attempt a limited assessment.\n"
-    "End your message with: 'This is an AI-generated report. Please consult a licensed medical professional for final diagnosis and treatment.'"
-)
-
-                },
+                { "role": "system", "content": system_prompt },
                 {
                     "role": "user",
                     "content": [
-                        {
-                            "type": "text",
-                            "text": "Please analyze this image and provide a full report."
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": { "url": image_url }
-                        }
+                        { "type": "text", "text": "Please analyze this image." },
+                        { "type": "image_url", "image_url": { "url": image_url } }
                     ]
                 }
             ],
@@ -78,12 +68,52 @@ async def upload_image(
         )
 
         result = response.choices[0].message.content
-        return { "result": result }
+        session_id = str(uuid.uuid4())
+        last_reports[session_id] = result
+
+        return { "result": result, "session_id": session_id }
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-# ✅ PDF Generator Endpoint
+# ✅ Follow-up endpoint
+@app.post("/follow-up/")
+async def follow_up(
+    question: str = Form(...),
+    session_id: str = Form(...),
+    x_api_key: str = Header(...)
+):
+    if x_api_key != SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    if session_id not in last_reports:
+        return JSONResponse(status_code=400, content={"error": "Invalid session ID"})
+
+    try:
+        system_prompt = (
+            "You are a clinical radiologist AI following up on a previously analyzed X-ray or MRI. "
+            "You will be asked additional questions and must reply in a professional, medically accurate tone."
+        )
+
+        messages = [
+            { "role": "system", "content": system_prompt },
+            { "role": "assistant", "content": last_reports[session_id] },
+            { "role": "user", "content": question }
+        ]
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            max_tokens=1000
+        )
+
+        answer = response.choices[0].message.content
+        return { "follow_up_response": answer }
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+# ✅ Generate PDF
 @app.post("/generate-pdf/")
 async def generate_pdf(report_text: str = Form(...)):
     try:
@@ -104,9 +134,7 @@ async def generate_pdf(report_text: str = Form(...)):
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-# ✅ PDF Download Endpoint
-from fastapi.responses import FileResponse
-
+# ✅ Download PDF
 @app.get("/download-pdf/{filename}")
 async def download_pdf(filename: str):
     file_path = f"/tmp/{filename}"
