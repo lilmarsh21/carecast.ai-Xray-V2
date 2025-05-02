@@ -99,7 +99,7 @@ async def generate_pdf(report_text: str = Form(...)):
         pdf.output(filepath)
 
         return {
-            "download_url": f"/download-pdf/{filename}"
+            "download_url": f"https://carecast-ai-xray-v2.onrender.com/download-pdf/{filename}"
         }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
