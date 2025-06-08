@@ -1,15 +1,13 @@
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse
 from openai import OpenAI
 from dotenv import load_dotenv
-from fpdf import FPDF
 import os
 import base64
 import uuid
 import cv2
 import numpy as np
-import re
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -25,7 +23,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory session tracking
 last_reports = {}
 last_images = {}
 
@@ -34,11 +31,9 @@ def apply_heatmap_overlay(image_bytes):
     image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     if image is None:
         return None, None
-
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     heatmap = cv2.applyColorMap(gray, cv2.COLORMAP_JET)
     overlay = cv2.addWeighted(image, 0.6, heatmap, 0.4, 0)
-
     _, buffer = cv2.imencode('.png', overlay)
     encoded_overlay = base64.b64encode(buffer).decode('utf-8')
     return overlay, f"data:image/png;base64,{encoded_overlay}"
@@ -64,12 +59,8 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
         "You are a highly experienced clinical radiologist specializing in the interpretation of X-rays, ultrasounds, MRIs, and other medical imaging. "
         "Your responsibility is to perform a comprehensive, high-detail analysis of the image provided, identifying all relevant abnormalities, patterns, and clinical indicators — including subtle or borderline findings. "
         "You must always respond with a fully structured diagnostic report, even in cases where the image appears normal, incomplete, or of low quality. "
-        "Do not provide disclaimers such as 'I’m unable to analyze this image.' Instead, deliver your best possible assessment based on available data. "
         "Structure your report using the following required sections: "
-        "- **Findings** – A clear and itemized summary of all observed issues.\n"
-        "- **Impression** – A clinical interpretation summarizing the findings.\n"
-        "- **Explanation** – Describe the reason for the impression and how it relates to the image.\n"
-        "- **Recommended Care Plan** – Suggest next steps or referrals."
+        "- **Findings**\n- **Impression**\n- **Explanation**\n- **Recommended Care Plan**"
     )
 
     completion = client.chat.completions.create(
@@ -103,43 +94,17 @@ async def follow_up(question: str = Form(...), session_id: str = Form(...), x_ap
 
     follow_up_prompt = (
         "You are continuing from a previous radiology report. Use the findings below as context and answer the user's follow-up question as a radiologist.\n\n"
-        f"---\n\n{previous_report}\n\n---\n\n"
-        f"Follow-up question: {question}"
+        f"{previous_report}\n\nQuestion: {question}"
     )
 
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": "You are a board-certified radiologist providing follow-up medical insights based on the prior diagnostic report."},
+            {"role": "system", "content": "You are a board-certified radiologist providing medical insight."},
             {"role": "user", "content": follow_up_prompt}
         ],
         max_tokens=600
     )
 
     reply = response.choices[0].message.content.strip()
-    return { "follow_up_response": reply }
-
-def remove_emojis(text):
-    return re.sub(r'[^\x00-\x7F]+', '', text)
-
-@app.post("/generate-pdf/")
-async def generate_pdf(report_text: str = Form(...), session_id: str = Form(...)):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.set_font("Arial", size=12)
-
-    for line in report_text.splitlines():
-        clean_line = remove_emojis(line)
-        pdf.multi_cell(0, 10, clean_line)
-
-    overlay_img = last_images.get(session_id)
-    if overlay_img is not None:
-        tmp_img_path = f"/tmp/{session_id}.png"
-        cv2.imwrite(tmp_img_path, overlay_img)
-        pdf.image(tmp_img_path, x=10, y=None, w=180)
-
-    filename = f"report_{uuid.uuid4().hex}.pdf"
-    filepath = f"/tmp/{filename}"
-    pdf.output(filepath)
-    return FileResponse(filepath, filename=filename, media_type='application/pdf')
+    return {"follow_up_response": reply}
