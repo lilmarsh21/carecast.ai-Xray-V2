@@ -9,7 +9,7 @@ import base64
 import uuid
 import cv2
 import numpy as np
-from io import BytesIO
+import re
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -119,6 +119,9 @@ async def follow_up(question: str = Form(...), session_id: str = Form(...), x_ap
     reply = response.choices[0].message.content.strip()
     return { "follow_up_response": reply }
 
+def remove_emojis(text):
+    return re.sub(r'[^\x00-\x7F]+', '', text)
+
 @app.post("/generate-pdf/")
 async def generate_pdf(report_text: str = Form(...), session_id: str = Form(...)):
     pdf = FPDF()
@@ -127,7 +130,8 @@ async def generate_pdf(report_text: str = Form(...), session_id: str = Form(...)
     pdf.set_font("Arial", size=12)
 
     for line in report_text.splitlines():
-        pdf.multi_cell(0, 10, line)
+        clean_line = remove_emojis(line)
+        pdf.multi_cell(0, 10, clean_line)
 
     overlay_img = last_images.get(session_id)
     if overlay_img is not None:
