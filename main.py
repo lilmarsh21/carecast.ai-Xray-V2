@@ -67,9 +67,12 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
         model="gpt-4o",
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": [{"type": "image_url", "image_url": {"url": image_url}}]}
+            {"role": "user", "content": [
+                {"type": "text", "text": "Please analyze this X-ray and follow this structure:\n- **Findings**\n- **Impression**\n- **Explanation**\n- **Recommended Care Plan**"},
+                {"type": "image_url", "image_url": {"url": image_url}}
+            ]}
         ],
-        max_tokens=1200
+        max_tokens=1500
     )
 
     result = completion.choices[0].message.content.strip()
