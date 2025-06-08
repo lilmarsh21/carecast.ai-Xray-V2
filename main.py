@@ -1,11 +1,7 @@
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddlewareAdd commentMore actions
 from fastapi.responses import JSONResponse, FileResponse
-from openai import OpenAI
-from dotenv import load_dotenv
-import os
-import base64
-import uuid
+@@ -10,6 +9,7 @@
 import cv2
 import numpy as np
 from io import BytesIO
@@ -13,20 +9,14 @@ from fpdf import FPDF
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-SECRET_KEY = os.getenv("UPLOAD_SECRET_KEY")
-
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
+@@ -25,25 +25,33 @@
     allow_headers=["*"],
 )
 
+# In-memory session tracking
 last_reports = {}
 
+def apply_heatmap_overlay(image_bytes):
 COLORMAP_OPTIONS = {
     "jet": cv2.COLORMAP_JET,
     "hot": cv2.COLORMAP_HOT,
@@ -42,6 +32,7 @@ def apply_heatmap_overlay(image_bytes, map_name="jet"):
         return None
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    heatmap = cv2.applyColorMap(gray, cv2.COLORMAP_JET)
     cmap = COLORMAP_OPTIONS.get(map_name.lower(), cv2.COLORMAP_JET)
     heatmap = cv2.applyColorMap(gray, cmap)
     overlay = cv2.addWeighted(image, 0.6, heatmap, 0.4, 0)
@@ -51,45 +42,39 @@ def apply_heatmap_overlay(image_bytes, map_name="jet"):
     return f"data:image/png;base64,{encoded_overlay}"
 
 @app.post("/upload/")
+async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...)):
 async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...), map: str = "jet"):
     if x_api_key != SECRET_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    image_data = await file.read()
-    if not image_data:
-        return JSONResponse(status_code=400, content={"error": "No image received."})
-
-    mime_type = file.content_type or "image/jpeg"
+@@ -55,12 +63,10 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
     image_base64 = base64.b64encode(image_data).decode("utf-8")
     image_url = f"data:{mime_type};base64,{image_base64}"
 
+    # Apply heatmap overlay
+    overlayed_image = apply_heatmap_overlay(image_data)
     overlayed_image = apply_heatmap_overlay(image_data, map)
     if not overlayed_image:
         return JSONResponse(status_code=500, content={"error": "Heatmap processing failed."})
 
+    # Generate report from OpenAI
     system_prompt = (
         "You are a highly experienced clinical radiologist specializing in the interpretation of X-rays, ultrasounds, MRIs, and other medical imaging. "
         "Your responsibility is to perform a comprehensive, high-detail analysis of the image provided, identifying all relevant abnormalities, patterns, and clinical indicators — including subtle or borderline findings. "
-        "You must always respond with a fully structured diagnostic report, even in cases where the image appears normal, incomplete, or of low quality. "
-        "Do not provide disclaimers such as 'I’m unable to analyze this image.' Instead, deliver your best possible assessment based on available data. "
-        "Structure your report using the following required sections: "
-        "- **Findings** – A clear and itemized summary of all observed issues.\n"
-        "- **Impression** – A clinical interpretation summarizing the findings.\n"
-        "- **Explanation** – Describe the reason for the impression and how it relates to the image.\n"
+@@ -73,8 +79,6 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
         "- **Recommended Care Plan** – Suggest next steps or referrals."
     )
+
+    user_prompt = f"This is an encoded image for diagnosis: {image_url}"
 
     completion = client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": [{"type": "image_url", "image_url": {"url": image_url}}]}
-        ],
-        max_tokens=1200
-    )
+@@ -86,24 +90,54 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
 
     result = completion.choices[0].message.content.strip()
     session_id = str(uuid.uuid4())
+    last_reports[session_id] = result
     last_reports[session_id] = {"text": result, "image": overlayed_image}
 
     return {
@@ -119,7 +104,9 @@ async def follow_up(question: str = Form(...), session_id: str = Form(...), x_ap
 
     return {"follow_up_response": followup.choices[0].message.content.strip()}
 
+# ✅ PDF Generation
 @app.post("/generate-pdf/")
+async def generate_pdf(report_text: str = Form(...)):
 async def generate_pdf(report_text: str = Form(...), image_url: str = Form(None)):
     pdf = FPDF()
     pdf.add_page()
@@ -141,4 +128,3 @@ async def generate_pdf(report_text: str = Form(...), image_url: str = Form(None)
     filename = f"report_{uuid.uuid4().hex}.pdf"
     filepath = f"/tmp/{filename}"
     pdf.output(filepath)
-    return FileResponse(filepath, filename=filename, media_type='application/pdf')
