@@ -76,7 +76,7 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
     user_prompt = f"This is an encoded image for diagnosis: {image_url}"
 
     completion = client.chat.completions.create(
-        model="gpt-4-vision-preview",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": [{"type": "image_url", "image_url": {"url": image_url}}]}
