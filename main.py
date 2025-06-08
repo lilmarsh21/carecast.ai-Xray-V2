@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from openai import OpenAI
 from dotenv import load_dotenv
+from fpdf import FPDF
 import os
 import base64
 import uuid
@@ -26,12 +27,13 @@ app.add_middleware(
 
 # In-memory session tracking
 last_reports = {}
+last_images = {}
 
 def apply_heatmap_overlay(image_bytes):
     np_arr = np.frombuffer(image_bytes, np.uint8)
     image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     if image is None:
-        return None
+        return None, None
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     heatmap = cv2.applyColorMap(gray, cv2.COLORMAP_JET)
@@ -39,7 +41,7 @@ def apply_heatmap_overlay(image_bytes):
 
     _, buffer = cv2.imencode('.png', overlay)
     encoded_overlay = base64.b64encode(buffer).decode('utf-8')
-    return f"data:image/png;base64,{encoded_overlay}"
+    return overlay, f"data:image/png;base64,{encoded_overlay}"
 
 @app.post("/upload/")
 async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...)):
@@ -54,12 +56,10 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
     image_base64 = base64.b64encode(image_data).decode("utf-8")
     image_url = f"data:{mime_type};base64,{image_base64}"
 
-    # Apply heatmap overlay
-    overlayed_image = apply_heatmap_overlay(image_data)
+    overlay_img, overlayed_image = apply_heatmap_overlay(image_data)
     if not overlayed_image:
         return JSONResponse(status_code=500, content={"error": "Heatmap processing failed."})
 
-    # Generate report from OpenAI
     system_prompt = (
         "You are a highly experienced clinical radiologist specializing in the interpretation of X-rays, ultrasounds, MRIs, and other medical imaging. "
         "Your responsibility is to perform a comprehensive, high-detail analysis of the image provided, identifying all relevant abnormalities, patterns, and clinical indicators — including subtle or borderline findings. "
@@ -71,8 +71,6 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
         "- **Explanation** – Describe the reason for the impression and how it relates to the image.\n"
         "- **Recommended Care Plan** – Suggest next steps or referrals."
     )
-
-    user_prompt = f"This is an encoded image for diagnosis: {image_url}"
 
     completion = client.chat.completions.create(
         model="gpt-4o",
@@ -86,6 +84,7 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
     result = completion.choices[0].message.content.strip()
     session_id = str(uuid.uuid4())
     last_reports[session_id] = result
+    last_images[session_id] = overlay_img
 
     return {
         "result": result,
@@ -93,16 +92,49 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
         "overlayed_image": overlayed_image
     }
 
+@app.post("/follow-up/")
+async def follow_up(question: str = Form(...), session_id: str = Form(...), x_api_key: str = Header(...)):
+    if x_api_key != SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
-# ✅ PDF Generation
+    previous_report = last_reports.get(session_id)
+    if not previous_report:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    follow_up_prompt = (
+        "You are continuing from a previous radiology report. Use the findings below as context and answer the user's follow-up question as a radiologist.\n\n"
+        f"---\n\n{previous_report}\n\n---\n\n"
+        f"Follow-up question: {question}"
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "You are a board-certified radiologist providing follow-up medical insights based on the prior diagnostic report."},
+            {"role": "user", "content": follow_up_prompt}
+        ],
+        max_tokens=600
+    )
+
+    reply = response.choices[0].message.content.strip()
+    return { "follow_up_response": reply }
+
 @app.post("/generate-pdf/")
-async def generate_pdf(report_text: str = Form(...)):
+async def generate_pdf(report_text: str = Form(...), session_id: str = Form(...)):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_font("Arial", size=12)
+
     for line in report_text.splitlines():
         pdf.multi_cell(0, 10, line)
+
+    overlay_img = last_images.get(session_id)
+    if overlay_img is not None:
+        tmp_img_path = f"/tmp/{session_id}.png"
+        cv2.imwrite(tmp_img_path, overlay_img)
+        pdf.image(tmp_img_path, x=10, y=None, w=180)
+
     filename = f"report_{uuid.uuid4().hex}.pdf"
     filepath = f"/tmp/{filename}"
     pdf.output(filepath)
