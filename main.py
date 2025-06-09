@@ -11,7 +11,7 @@ import numpy as np
 
 load_dotenv()
 
-app = FastAPI()  # ✅ MUST come before any @app decorators
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
@@ -73,10 +73,19 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
         model="gpt-4o",
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": [
-                {"type": "text", "text": "Please analyze this X-ray and follow this structure:\n- **Findings**\n- **Impression**\n- **Explanation**\n- **Recommended Care Plan**"},
-                {"type": "image_url", "image_url": {"url": original_image_url}}
-            ]}
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Please analyze this X-ray and follow this structure:\n- **Findings**\n- **Impression**\n- **Explanation**\n- **Recommended Care Plan**"
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": original_image_url}
+                    }
+                ]
+            }
         ],
         max_tokens=4096,
         temperature=0.2
@@ -114,7 +123,7 @@ async def follow_up(question: str = Form(...), session_id: str = Form(...), x_ap
             {"role": "system", "content": "You are a board-certified radiologist providing medical insight."},
             {"role": "user", "content": follow_up_prompt}
         ],
-        max_tokens=1200,
+        max_tokens=800,
         temperature=0.2
     )
 
