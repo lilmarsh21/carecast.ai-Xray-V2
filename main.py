@@ -62,11 +62,11 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
         "When analyzing the image, always assume the reader is a physician or specialist who expects a complete and professional-level report. "
         "Do not simplify the language. Use real medical terminology, describe anatomical regions in detail, and reference all visible structures, even if they appear normal. "
         "When abnormalities are found, include likely etiologies, comparative severity, and clinical implications. "
-        "Structure the report in the following format:\n\n"
-        "- **Findings**: Describe everything visible in the image, both normal and abnormal.\n"
-        "- **Impression**: Provide a differential diagnosis or leading conclusions based on the image.\n"
-        "- **Explanation**: Support your impression with reasoning and references to the image.\n"
-        "- **Recommended Care Plan**: Suggest the next steps for diagnosis or treatment, and what kind of specialist should be consulted."
+        "Structure your report using the following required sections: "
+        "- **Findings** – A clear and itemized summary of all observed issues.\n"
+        "- **Impression** – A clinical interpretation summarizing the findings.\n"
+        "- **Explanation** – Describe the reason for the impression and how it relates to the image.\n"
+        "- **Recommended Care Plan** – Suggest next steps or referrals."
     )
 
     completion = client.chat.completions.create(
