@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -10,8 +11,10 @@ import cv2
 import numpy as np
 
 load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+SECRET_KEY = os.getenv("UPLOAD_SECRET_KEY")
 
-app = FastAPI()  # ✅ MUST come before any @app decorators
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,9 +23,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-SECRET_KEY = os.getenv("UPLOAD_SECRET_KEY")
 
 last_reports = {}
 last_images = {}
@@ -50,7 +50,7 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
 
     mime_type = file.content_type or "image/jpeg"
     image_base64 = base64.b64encode(image_data).decode("utf-8")
-    original_image_url = f"data:{mime_type};base64,{image_base64}"
+    image_url = f"data:{mime_type};base64,{image_base64}"
 
     overlay_img, overlayed_image = apply_heatmap_overlay(image_data)
     if not overlayed_image:
@@ -60,12 +60,8 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
         "You are a highly experienced clinical radiologist specializing in the interpretation of X-rays, ultrasounds, MRIs, and other medical imaging. "
         "Your responsibility is to perform a comprehensive, high-detail analysis of the image provided, identifying all relevant abnormalities, patterns, and clinical indicators — including subtle or borderline findings. "
         "You must always respond with a fully structured diagnostic report, even in cases where the image appears normal, incomplete, or of low quality. "
-        "Do not provide disclaimers such as 'I’m unable to analyze this image.' Instead, deliver your best possible assessment based on available data. "
         "Structure your report using the following required sections: "
-        "- **Findings** – A clear and itemized summary of all observed issues.\n"
-        "- **Impression** – A clinical interpretation summarizing the findings.\n"
-        "- **Explanation** – Describe the reason for the impression and how it relates to the image.\n"
-        "- **Recommended Care Plan** – Suggest next steps or referrals."
+        "- **Findings**\n- **Impression**\n- **Explanation**\n- **Recommended Care Plan**"
     )
 
     completion = client.chat.completions.create(
@@ -74,11 +70,10 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": [
                 {"type": "text", "text": "Please analyze this X-ray and follow this structure:\n- **Findings**\n- **Impression**\n- **Explanation**\n- **Recommended Care Plan**"},
-                {"type": "image_url", "image_url": {"url": original_image_url}}
+                {"type": "image_url", "image_url": {"url": image_url}}
             ]}
         ],
-        max_tokens=4096,
-        temperature=0.2
+        max_tokens=1500
     )
 
     result = completion.choices[0].message.content.strip()
@@ -89,7 +84,6 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
     return {
         "result": result,
         "session_id": session_id,
-        "original_image": original_image_url,
         "overlayed_image": overlayed_image
     }
 
@@ -113,13 +107,8 @@ async def follow_up(question: str = Form(...), session_id: str = Form(...), x_ap
             {"role": "system", "content": "You are a board-certified radiologist providing medical insight."},
             {"role": "user", "content": follow_up_prompt}
         ],
-        max_tokens=1200,
-        temperature=0.2
+        max_tokens=2000
     )
 
     reply = response.choices[0].message.content.strip()
     return {"follow_up_response": reply}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=10000)
