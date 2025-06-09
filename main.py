@@ -1,6 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
@@ -8,14 +8,10 @@ import base64
 import uuid
 import cv2
 import numpy as np
-from io import BytesIO
-from fpdf import FPDF
 
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-SECRET_KEY = os.getenv("UPLOAD_SECRET_KEY")
 
-app = FastAPI()
+app = FastAPI()  # ✅ MUST come before any @app decorators
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,33 +21,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+SECRET_KEY = os.getenv("UPLOAD_SECRET_KEY")
+
 last_reports = {}
+last_images = {}
 
-COLORMAP_OPTIONS = {
-    "jet": cv2.COLORMAP_JET,
-    "hot": cv2.COLORMAP_HOT,
-    "cool": cv2.COLORMAP_COOL,
-    "bone": cv2.COLORMAP_BONE,
-    "winter": cv2.COLORMAP_WINTER
-}
-
-def apply_heatmap_overlay(image_bytes, map_name="jet"):
+def apply_heatmap_overlay(image_bytes):
     np_arr = np.frombuffer(image_bytes, np.uint8)
     image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     if image is None:
-        return None
-
+        return None, None
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    cmap = COLORMAP_OPTIONS.get(map_name.lower(), cv2.COLORMAP_JET)
-    heatmap = cv2.applyColorMap(gray, cmap)
+    heatmap = cv2.applyColorMap(gray, cv2.COLORMAP_JET)
     overlay = cv2.addWeighted(image, 0.6, heatmap, 0.4, 0)
-
     _, buffer = cv2.imencode('.png', overlay)
     encoded_overlay = base64.b64encode(buffer).decode('utf-8')
-    return f"data:image/png;base64,{encoded_overlay}"
+    return overlay, f"data:image/png;base64,{encoded_overlay}"
 
 @app.post("/upload/")
-async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...), map: str = "jet"):
+async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...)):
     if x_api_key != SECRET_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -61,9 +50,9 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
 
     mime_type = file.content_type or "image/jpeg"
     image_base64 = base64.b64encode(image_data).decode("utf-8")
-    image_url = f"data:{mime_type};base64,{image_base64}"
+    original_image_url = f"data:{mime_type};base64,{image_base64}"
 
-    overlayed_image = apply_heatmap_overlay(image_data, map)
+    overlay_img, overlayed_image = apply_heatmap_overlay(image_data)
     if not overlayed_image:
         return JSONResponse(status_code=500, content={"error": "Heatmap processing failed."})
 
@@ -83,18 +72,24 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
         model="gpt-4o",
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": [{"type": "image_url", "image_url": {"url": image_url}}]}
+            {"role": "user", "content": [
+                {"type": "text", "text": "Please analyze this X-ray and follow this structure:\n- **Findings**\n- **Impression**\n- **Explanation**\n- **Recommended Care Plan**"},
+                {"type": "image_url", "image_url": {"url": original_image_url}}
+            ]}
         ],
-        max_tokens=1200
+        max_tokens=4096,
+        temperature=0.2
     )
 
     result = completion.choices[0].message.content.strip()
     session_id = str(uuid.uuid4())
-    last_reports[session_id] = {"text": result, "image": overlayed_image}
+    last_reports[session_id] = result
+    last_images[session_id] = overlay_img
 
     return {
         "result": result,
         "session_id": session_id,
+        "original_image": original_image_url,
         "overlayed_image": overlayed_image
     }
 
@@ -103,42 +98,28 @@ async def follow_up(question: str = Form(...), session_id: str = Form(...), x_ap
     if x_api_key != SECRET_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    previous = last_reports.get(session_id)
-    if not previous:
-        return {"follow_up_response": "❌ Session expired or not found."}
+    previous_report = last_reports.get(session_id)
+    if not previous_report:
+        raise HTTPException(status_code=404, detail="Session not found")
 
-    followup = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You're a clinical radiologist continuing a follow-up diagnosis."},
-            {"role": "user", "content": previous["text"]},
-            {"role": "user", "content": question}
-        ],
-        max_tokens=600
+    follow_up_prompt = (
+        "You are continuing from a previous radiology report. Use the findings below as context and answer the user's follow-up question as a radiologist.\n\n"
+        f"{previous_report}\n\nQuestion: {question}"
     )
 
-    return {"follow_up_response": followup.choices[0].message.content.strip()}
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "You are a board-certified radiologist providing medical insight."},
+            {"role": "user", "content": follow_up_prompt}
+        ],
+        max_tokens=1200,
+        temperature=0.2
+    )
 
-@app.post("/generate-pdf/")
-async def generate_pdf(report_text: str = Form(...), image_url: str = Form(None)):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.set_font("Arial", size=12)
+    reply = response.choices[0].message.content.strip()
+    return {"follow_up_response": reply}
 
-    if image_url and image_url.startswith("data:image"):
-        header, b64_data = image_url.split(",", 1)
-        binary = base64.b64decode(b64_data)
-        temp_path = f"/tmp/image_{uuid.uuid4().hex}.png"
-        with open(temp_path, "wb") as f:
-            f.write(binary)
-        pdf.image(temp_path, x=10, y=10, w=180)
-        pdf.ln(85)
-
-    for line in report_text.splitlines():
-        pdf.multi_cell(0, 10, line)
-
-    filename = f"report_{uuid.uuid4().hex}.pdf"
-    filepath = f"/tmp/{filename}"
-    pdf.output(filepath)
-    return FileResponse(filepath, filename=filename, media_type='application/pdf')
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=10000)
