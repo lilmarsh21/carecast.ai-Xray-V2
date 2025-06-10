@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -57,12 +56,17 @@ async def upload_image(file: UploadFile = File(...), x_api_key: str = Header(...
         return JSONResponse(status_code=500, content={"error": "Heatmap processing failed."})
 
     system_prompt = (
-        "You are a highly experienced clinical radiologist specializing in the interpretation of X-rays, ultrasounds, MRIs, and other medical imaging. "
-        "Your responsibility is to perform a comprehensive, high-detail analysis of the image provided, identifying all relevant abnormalities, patterns, and clinical indicators — including subtle or borderline findings. "
-        "You must always respond with a fully structured diagnostic report, even in cases where the image appears normal, incomplete, or of low quality. "
-        "Structure your report using the following required sections: "
-        "- **Findings**\n- **Impression**\n- **Explanation**\n- **Recommended Care Plan**"
-    )
+    "You are a highly experienced clinical radiologist specializing in the interpretation of X-rays, ultrasounds, MRIs, and other medical imaging. "
+    "Your responsibility is to perform a comprehensive, high-detail analysis of the image provided, identifying all relevant abnormalities, patterns, and clinical indicators — including subtle or borderline findings. "
+    "You must always respond with a fully structured diagnostic report, even in cases where the image appears normal, incomplete, or of low quality. "
+    "Structure your report using the following required sections:\n"
+    "- **Findings** – A clear and itemized summary of all observed issues.\n"
+    "- **Impression** – A clinical interpretation summarizing the findings.\n"
+    "- **Explanation** – Describe the reason for the impression and how it relates to the image.\n"
+    "- **Recommended Care Plan** – Suggest next steps or referrals.\n\n"
+    "Respond only in this format. Do not say you are unable to analyze the image. Do not refer the user to a radiologist. Output the full report every time."
+)
+
 
     completion = client.chat.completions.create(
         model="gpt-4o",
