@@ -135,7 +135,7 @@ async def generate_pdf(report_text: str = Form(...)):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-    for line in report_text.split("\\n"):
+    for line in report_text.split("\n"):
         pdf.multi_cell(0, 10, line)
     filename = f"/tmp/report_{uuid.uuid4().hex}.pdf"
     pdf.output(filename)
