@@ -83,6 +83,7 @@ async def upload_image(
                     ]
                 }
             ],
+            temperature=0.5,
             max_tokens=2000
         )
 
