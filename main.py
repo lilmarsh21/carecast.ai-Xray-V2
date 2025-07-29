@@ -105,16 +105,17 @@ async def upload_image(
 
     # Metadata injection
     metadata = (
-        f"Patient Info:\n"
-        f"- Title: {title}\n"
-        f"- Body Part: {body_part}\n"
-        f"- Age: {age}\n"
-        f"- Gender: {gender}\n"
-        f"- X-ray Type: {xray_type}\n"
-        f"- Symptoms: {symptoms or 'None provided'}\n\n"
-        f"Analyze the following image based on this info."
-    )
-
+    f"Patient Info:\n"
+    f"- Title: {title}\n"
+    f"- Body Part: {body_part}\n"
+    f"- Age: {age}\n"
+    f"- Gender: {gender}\n"
+    f"- X-ray Type: {xray_type}\n"
+    f"- Symptoms: {symptoms or 'None provided'}\n\n"
+    f"Use this metadata as ground truth. **Do not guess the body part.**\n"
+    f"Take the patient's **age and gender into account** when interpreting the image, especially when evaluating differential diagnoses and likelihood of conditions.\n"
+    f"Also incorporate the reported symptoms into your reasoning."
+)
     # System prompt
     system_prompt = (
         "You are a highly experienced clinical radiologist specializing in the interpretation of X-rays, ultrasounds, MRIs, and other medical imaging. Your responsibility is to perform a comprehensive, high-detail analysis of the image provided, identifying all relevant abnormalities, patterns, and clinical indicators — including subtle or borderline findings. "
