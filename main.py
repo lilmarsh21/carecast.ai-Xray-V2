@@ -104,14 +104,17 @@ async def upload_image(
     image_url = f"data:{mime_type};base64,{image_base64}"
 
     # Metadata injection
-    patient_metadata = (
+    metadata = (
     f"Patient Metadata:\n"
     f"- Title: {title}\n"
     f"- Body Part: {body_part}\n"
     f"- Age: {age}\n"
     f"- Gender: {gender}\n"
     f"- X-ray Type: {xray_type}\n"
-    f"- Symptoms: {symptoms or 'None provided'}\n"
+    f"- Symptoms: {symptoms or 'None provided'}\n\n"
+    f"IMPORTANT: Use this metadata as **absolute ground truth**. "
+    f"Do not infer or guess the body part or patient characteristics. "
+    f"Base your interpretation, differentials, and impressions **directly on this metadata**, especially the body part and symptoms."
 )
     # System prompt
     system_prompt = (
@@ -140,8 +143,8 @@ async def upload_image(
                     ]
                 }
             ],
-            temperature=0.5,
-            max_tokens=2000
+            temperature=0.6,
+            max_tokens=3000
         )
 
         result = response.choices[0].message.content
