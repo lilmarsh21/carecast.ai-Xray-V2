@@ -105,16 +105,16 @@ async def upload_image(
 
     # Metadata injection
     metadata = (
-    f"Patient Metadata:\n"
+    f"Patient Info:\n"
     f"- Title: {title}\n"
     f"- Body Part: {body_part}\n"
     f"- Age: {age}\n"
     f"- Gender: {gender}\n"
     f"- X-ray Type: {xray_type}\n"
     f"- Symptoms: {symptoms or 'None provided'}\n\n"
-    f"IMPORTANT: Use this metadata as **absolute ground truth**. "
-    f"Do not infer or guess the body part or patient characteristics. "
-    f"Base your interpretation, differentials, and impressions **directly on this metadata**, especially the body part and symptoms."
+    f"You are analyzing a medical image of the **{body_part}** in a **{age}-year-old {gender}** patient. "
+    f"The reported symptoms include: **{symptoms or 'none provided'}**. "
+    f"Use all of this patient metadata directly in your diagnostic reasoning, especially when generating the Findings, Impression, and Explanation sections."
 )
     # System prompt
     system_prompt = (
