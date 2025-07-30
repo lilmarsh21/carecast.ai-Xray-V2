@@ -69,12 +69,7 @@ last_reports = {}
 async def upload_image(
     file: UploadFile = File(...),
     x_api_key: str = Header(...),
-    title: str = Form(...),
-    body_part: str = Form(...),
-    age: str = Form(...),
-    gender: str = Form(...),
-    symptoms: str = Form(...),
-    xray_type: str = Form(...)
+    user_meta: str = Form(...)
 ):
     if x_api_key != SECRET_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -104,32 +99,18 @@ async def upload_image(
     image_url = f"data:{mime_type};base64,{image_base64}"
 
     # Metadata injection
-    metadata = (
-    f"Patient Info:\n"
-    f"- Title: {title}\n"
-    f"- Body Part: {body_part}\n"
-    f"- Age: {age}\n"
-    f"- Gender: {gender}\n"
-    f"- X-ray Type: {xray_type}\n"
-    f"- Symptoms: {symptoms or 'None provided'}\n\n"
-    f"You are analyzing a medical image of the **{body_part}** in a **{age}-year-old {gender}** patient. "
-    f"The reported symptoms include: **{symptoms or 'none provided'}**. "
-    f"Use all of this patient metadata directly in your diagnostic reasoning, especially when generating the Findings, Impression, and Explanation sections."
-)
+metadata = user_meta
+
     # System prompt
     system_prompt = (
-    f"You are a highly experienced clinical radiologist specializing in the interpretation of all X-rays, ultrasounds, MRIs, and other medical imaging. "
-    f"Use the following patient data as ground truth:\n\n{patient_metadata}\n\n"
-    f"Do not guess the body part — always assume it is the provided value. Use the patient's age and gender when considering differential diagnoses. Incorporate reported symptoms directly into your reasoning.\n\n"
-    "Your task is to perform a comprehensive, high-detail analysis of the image provided, identifying all relevant abnormalities, patterns, and clinical indicators — including subtle or borderline findings. "
-    "You must always respond with a fully structured diagnostic report, even in cases where the image appears normal, incomplete, or of low quality. Do not provide disclaimers such as 'I’m unable to analyze this image.' Instead, deliver your best possible assessment based on available data. "
-    "Structure your response using the following required sections:\n"
-    "- **Findings** – A detailed summary of all visible image features. Always mention the body part in your descriptions.\n"
-    "- **Impression** – A clinically reasoned diagnostic conclusion.\n"
-    "- **Explanation** – A deeper rationale based on anatomy, pathology, and patient context.\n"
-    "- **Recommended Care Plan** – Clinical next steps, including referrals, imaging, and urgency.\n"
-    "Always end your response with the following disclaimer: This report is created by CareCast.AI. Please consult a licensed medical professional for final diagnosis and treatment."
+    "You are one of the best clinical radiologist in the world. "
+    "Carefully analyze the provided medical image in combination with the user's description and questions. "
+    "Write one long, professional, and detailed diagnostic report as if dictated for a clinical chart. "
+    "Do not use sections or headings — just one full, cohesive paragraph including all findings, reasoning, and conclusions. "
+    "Be specific, use clinical terms, and integrate the user's notes in your assessment. "
+    "Always end with: This report is created by CareCast.AI. Please consult a licensed medical professional for final diagnosis and treatment."
 )
+
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
