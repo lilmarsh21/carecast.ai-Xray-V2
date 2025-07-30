@@ -69,6 +69,7 @@ last_reports = {}
 async def upload_image(
     file: UploadFile = File(...),
     x_api_key: str = Header(...),
+    title: str = Form(...),
     user_meta: str = Form(...)
 ):
     if x_api_key != SECRET_KEY:
