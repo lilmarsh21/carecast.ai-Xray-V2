@@ -116,24 +116,24 @@ async def upload_image(
         response = client.chat.completions.create(
     model="gpt-4o",
     messages=[
-    {
-        "role": "system",
-        "content": system_prompt
-    },
-    {
-        "role": "user",
-        "content": f"Patient metadata:\n{user_meta}"
-    },
-    {
-        "role": "user",
-        "content": {
-            "type": "image_url",
-            "image_url": {
-                "url": image_url
-            }
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"Please analyze this medical image and the following patient details:\n\n{user_meta}\n\nReturn a full diagnostic report."
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_url,
+                        "detail": "high"
+                    }
+                }
+            ]
         }
-    }
-]
+    ],
     temperature=0.6,
     max_tokens=3000
 )
