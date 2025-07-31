@@ -106,24 +106,37 @@ async def upload_image(
         response = client.chat.completions.create(
     model="gpt-4o",
     messages=[
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Patient details:\n{user_meta}"},
-        {"role": "user", "content": {
-            "type": "image_url",
-            "image_url": {"url": image_url}
-        }},
-        {"role": "user", "content": (
-            "Based on both the X-ray and the patient details provided, write a detailed diagnostic report with the following required sections:\n"
-            "- **Findings**\n"
-            "- **Impression**\n"
-            "- **Explanation**\n"
-            "- **Recommended Care Plan**\n\n"
-            "End with: This report is created by CareCast.AI. Please consult a licensed medical professional for final diagnosis and treatment."
-        )}
+        {
+            "role": "system",
+            "content": "You are a clinical radiologist generating diagnostic reports from X-rays and patient metadata."
+        },
+        {
+            "role": "user",
+            "content": f"PATIENT METADATA:\n{user_meta}"
+        },
+        {
+            "role": "user",
+            "content": {
+                "type": "image_url",
+                "image_url": {"url": image_url}
+            }
+        },
+        {
+            "role": "user",
+            "content": (
+                "Using both the metadata and the image together, generate a structured diagnostic report with the following sections:\n"
+                "- **Findings**\n"
+                "- **Impression**\n"
+                "- **Explanation**\n"
+                "- **Recommended Care Plan**\n\n"
+                "Be specific and include reasoning tied to the patient's symptoms. Always end with:\n"
+            )
+        }
     ],
     temperature=0.6,
     max_tokens=3000
 )
+
 
         result = response.choices[0].message.content
         session_id = str(uuid.uuid4())
