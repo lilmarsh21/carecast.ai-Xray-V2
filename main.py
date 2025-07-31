@@ -120,9 +120,9 @@ async def upload_image(
     messages=[
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": [
-    {"type": "image_url", "image_url": {"url": image_url}}
-]}
-
+            {"type": "text", "text": f"Patient Metadata:\n{user_meta}"},
+            {"type": "image_url", "image_url": {"url": image_url}}
+        ]}
     ],
     temperature=0.6,
     max_tokens=3000
