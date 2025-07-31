@@ -100,29 +100,26 @@ async def upload_image(
 
         # ✅ Inject metadata directly into system prompt
         system_prompt = (
-            f"You are a highly experienced clinical radiologist specializing in the interpretation of X-rays, ultrasounds, MRIs, and other medical imaging. "
-            "You will be given both a detailed image and a patient metadata description. The metadata contains important clinical history, symptoms, or context that must inform your interpretation. "
-            f"\n\nPATIENT METADATA:\n{user_meta}\n\n"
-            "Your responsibility is to perform a comprehensive, high-detail analysis of the image provided, identifying all relevant abnormalities, patterns, and clinical indicators — including subtle or borderline findings. "
-            "You must always respond with a fully structured diagnostic report, even in cases where the image appears normal, incomplete, or of low quality. "
-            "Do not provide disclaimers such as 'I’m unable to analyze this image.' Instead, deliver your best possible assessment based on available data. "
-            "Structure your report using the following required sections:\n"
-            "- **Findings** – A clear and itemized summary of all observed image features, including measurements, densities, anomalies, and any regions of interest.\n"
-            "- **Impression** – A concise diagnostic interpretation or suspected condition based on the findings.\n"
-            "- **Explanation** – A deeper clinical rationale for the impression, referencing anatomical or pathological details when appropriate.\n"
-            "- **Recommended Care Plan** – Next steps for clinical follow-up, such as additional imaging, referrals, or urgent care if warranted.\n\n"
-            "If image quality is limited or obscured, still provide a cautious but informative assessment based on visible regions.\n\n"
-            "Always end your response with the following disclaimer: This report is created by CareCast.AI. Please consult a licensed medical professional for final diagnosis and treatment."
-        )
+    "You are a clinical radiologist creating structured diagnostic reports from X-ray images and patient metadata."
+)
 
         response = client.chat.completions.create(
     model="gpt-4o",
     messages=[
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": [
-            {"type": "text", "text": f"Patient Metadata:\n{user_meta}"},
-            {"type": "image_url", "image_url": {"url": image_url}}
-        ]}
+        {"role": "user", "content": f"Patient details:\n{user_meta}"},
+        {"role": "user", "content": {
+            "type": "image_url",
+            "image_url": {"url": image_url}
+        }},
+        {"role": "user", "content": (
+            "Based on both the X-ray and the patient details provided, write a detailed diagnostic report with the following required sections:\n"
+            "- **Findings**\n"
+            "- **Impression**\n"
+            "- **Explanation**\n"
+            "- **Recommended Care Plan**\n\n"
+            "End with: This report is created by CareCast.AI. Please consult a licensed medical professional for final diagnosis and treatment."
+        )}
     ],
     temperature=0.6,
     max_tokens=3000
