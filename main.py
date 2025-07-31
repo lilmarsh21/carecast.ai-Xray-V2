@@ -110,29 +110,31 @@ async def upload_image(
     "- **Explanation** – A deeper clinical rationale for the impression, referencing anatomical or pathological details when appropriate.\n"
     "- **Recommended Care Plan** – Next steps for clinical follow-up, such as additional imaging, referrals, or urgent care if warranted.\n\n"
     "If image quality is limited or obscured, still provide a cautious but informative assessment based on visible regions.\n\n"
-    "Always end your response with the following disclaimer: This report is created by CareCast.AI. Please consult a licensed medical professional for final diagnosis and treatment."
+    "Do not include any disclaimers or legal statements. Return only the diagnostic sections: Findings, Impression, Explanation, and Recommended Care Plan."
 )
-
 
         response = client.chat.completions.create(
     model="gpt-4o",
     messages=[
         {
             "role": "system",
-            "content": system_prompt  # a long, detailed system_prompt with embedded metadata
+            "content": system_prompt
         },
         {
             "role": "user",
-            "content": [
-                {"type": "text", "text": f"Patient metadata:\n{user_meta}"},
-                {"type": "image_url", "image_url": {"url": image_url}}
-            ]
+            "content": f"Patient metadata:\n{user_meta}"
+        },
+        {
+            "role": "user",
+            "content": {
+                "type": "image_url",
+                "image_url": {"url": image_url}
+            }
         }
     ],
     temperature=0.6,
     max_tokens=3000
 )
-
 
         result = response.choices[0].message.content
         session_id = str(uuid.uuid4())
