@@ -122,14 +122,10 @@ async def upload_image(
         },
         {
             "role": "user",
-            "content": f"Patient metadata:\n{user_meta}"
-        },
-        {
-            "role": "user",
-            "content": {
-                "type": "image_url",
-                "image_url": {"url": image_url}
-            }
+            "content": [
+                { "type": "text", "text": f"Patient metadata:\n{user_meta}" },
+                { "type": "image_url", "image_url": { "url": image_url } }
+            ]
         }
     ],
     temperature=0.6,
