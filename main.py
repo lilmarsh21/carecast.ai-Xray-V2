@@ -104,26 +104,21 @@ metadata = user_meta
 
     # System prompt
     system_prompt = (
-    "You are an expert radiologist generating a diagnostic report from both metadata and an X-ray image. "
-    "The patient’s metadata contains critical context such as symptoms, history, body part, and scan type — read it carefully and reference it directly in your analysis. "
-    "Never ignore the metadata. Use it to focus your attention and guide your interpretation of the X-ray. "
-    "Generate one cohesive, professional paragraph with clinical reasoning and a clear impression. "
-    "Do not use headings like 'Findings' or 'Impression'. "
+    f"You are an expert radiologist analyzing the following patient metadata:\n\n"
+    f"{user_meta}\n\n"
+    "You will also be given an X-ray image. Use both sources together to write one long, professional, and detailed diagnostic report as if dictated for a clinical chart. "
+    "Be specific and integrate the metadata directly in your clinical reasoning. "
+    "Do not use headings. Just write one full paragraph. "
     "Always end with: This report is created by CareCast.AI. Please consult a licensed medical professional for final diagnosis and treatment."
 )
 
-    try:
-        response = client.chat.completions.create(
+response = client.chat.completions.create(
     model="gpt-4o",
     messages=[
         {"role": "system", "content": system_prompt},
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": user_meta},  # metadata only here
-                {"type": "image_url", "image_url": {"url": image_url}}  # image here
-            ]
-        }
+        {"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": image_url}}
+        ]}
     ],
     temperature=0.6,
     max_tokens=3000
