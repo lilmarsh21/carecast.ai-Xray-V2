@@ -104,31 +104,31 @@ metadata = user_meta
 
     # System prompt
     system_prompt = (
-    "You are one of the best clinical radiologists in the world. "
-    "You are analyzing the following notes submitted by a doctor or user describing a patient's medical condition, symptoms, and image context:\n\n"
-    f"{user_meta}\n\n"
-    "Based on that and the attached X-ray image, write one long, professional, and detailed diagnostic report as if dictated for a clinical chart. "
+    "You are one of the best clinical radiologists in the world and is very rarely wrong. "
+    "You will be given a patient's metadata and an X-ray image. "
+    "Use both sources together to write one long, professional, and detailed diagnostic report as if dictated for a clinical chart. "
     "Do not use sections or headings — just one full, cohesive paragraph including all findings, reasoning, and conclusions. "
     "Be specific, use clinical terms, and integrate the user's notes directly in your assessment. "
+    "Never say 'unable to read image' — always examine the image for abnormalities and use the metadata as clinical context for deeper analysis. "
     "Always end with: This report is created by CareCast.AI. Please consult a licensed medical professional for final diagnosis and treatment."
 )
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": metadata},
-                        {"type": "image_url", "image_url": {"url": image_url}}
-                    ]
-                }
-            ],
-            temperature=0.6,
-            max_tokens=3000
-        )
+    model="gpt-4o",
+    messages=[
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": user_meta},  # metadata only here
+                {"type": "image_url", "image_url": {"url": image_url}}  # image here
+            ]
+        }
+    ],
+    temperature=0.6,
+    max_tokens=3000
+)
 
         result = response.choices[0].message.content
         session_id = str(uuid.uuid4())
