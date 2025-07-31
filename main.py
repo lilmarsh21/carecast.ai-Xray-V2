@@ -100,37 +100,33 @@ async def upload_image(
 
         # ✅ Inject metadata directly into system prompt
         system_prompt = (
-    "You are a clinical radiologist creating structured diagnostic reports from X-ray images and patient metadata."
+    "You are a highly experienced clinical radiologist specializing in the interpretation of X-rays, ultrasounds, MRIs, and other medical imaging. "
+    "Your responsibility is to perform a comprehensive, high-detail analysis of the image provided, identifying all relevant abnormalities, patterns, and clinical indicators — including subtle or borderline findings. "
+    "You must always respond with a fully structured diagnostic report, even in cases where the image appears normal, incomplete, or of low quality. "
+    "Do not provide disclaimers such as 'I’m unable to analyze this image.' Instead, deliver your best possible assessment based on available data. "
+    "Structure your report using the following required sections:\n"
+    "- **Findings** – A clear and itemized summary of all observed image features, including measurements, densities, anomalies, and any regions of interest.\n"
+    "- **Impression** – A concise diagnostic interpretation or suspected condition based on the findings.\n"
+    "- **Explanation** – A deeper clinical rationale for the impression, referencing anatomical or pathological details when appropriate.\n"
+    "- **Recommended Care Plan** – Next steps for clinical follow-up, such as additional imaging, referrals, or urgent care if warranted.\n\n"
+    "If image quality is limited or obscured, still provide a cautious but informative assessment based on visible regions.\n\n"
+    "Always end your response with the following disclaimer: This report is created by CareCast.AI. Please consult a licensed medical professional for final diagnosis and treatment."
 )
+
 
         response = client.chat.completions.create(
     model="gpt-4o",
     messages=[
         {
             "role": "system",
-            "content": "You are a clinical radiologist generating diagnostic reports from X-rays and patient metadata."
+            "content": system_prompt  # a long, detailed system_prompt with embedded metadata
         },
         {
             "role": "user",
-            "content": f"PATIENT METADATA:\n{user_meta}"
-        },
-        {
-            "role": "user",
-            "content": {
-                "type": "image_url",
-                "image_url": {"url": image_url}
-            }
-        },
-        {
-            "role": "user",
-            "content": (
-                "Using both the metadata and the image together, generate a structured diagnostic report with the following sections:\n"
-                "- **Findings**\n"
-                "- **Impression**\n"
-                "- **Explanation**\n"
-                "- **Recommended Care Plan**\n\n"
-                "Be specific and include reasoning tied to the patient's symptoms. Always end with:\n"
-            )
+            "content": [
+                {"type": "text", "text": f"Patient metadata:\n{user_meta}"},
+                {"type": "image_url", "image_url": {"url": image_url}}
+            ]
         }
     ],
     temperature=0.6,
