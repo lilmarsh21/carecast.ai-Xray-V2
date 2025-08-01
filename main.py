@@ -11,9 +11,6 @@ import numpy as np
 import pydicom
 from io import BytesIO
 
-import logging
-logging.basicConfig(level=logging.INFO)
-
 # ----------------------------
 # 🔥 Heatmap overlay function
 # ----------------------------
@@ -81,10 +78,6 @@ async def upload_image(
         image_data = await file.read()
         if not image_data:
             return JSONResponse(status_code=400, content={"error": "No image received."})
-
-        logging.info(f"🧠 USER META: {user_meta[:100]}")
-        logging.info(f"🖼️ IMAGE SIZE: {len(image_data)} bytes")
-
 
         filename = file.filename.lower()
         if filename.endswith(".dcm"):
