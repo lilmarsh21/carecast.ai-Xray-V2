@@ -79,6 +79,9 @@ async def upload_image(
         if not image_data:
             return JSONResponse(status_code=400, content={"error": "No image received."})
 
+        print(f"🧠 USER META: {user_meta[:100]}")
+        print(f"🖼️ IMAGE SIZE: {len(image_data)} bytes")
+
         filename = file.filename.lower()
         if filename.endswith(".dcm"):
             image = read_dicom_file(image_data)
