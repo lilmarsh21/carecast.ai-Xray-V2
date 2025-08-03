@@ -94,22 +94,23 @@ async def upload_image(
         response = client.chat.completions.create(
     model="gpt-4o",
     messages=[
-        { "role": "system", "content": system_prompt },
+        {
+            "role": "system",
+            "content": system_prompt
+        },
         {
             "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": f"Patient Details:\n{user_meta.strip()}\n\nPlease review the following X-ray image and provide a full diagnostic report."
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": image_url,
-                        "detail": "high"
-                    }
+            "content": f"Patient metadata:\n{user_meta.strip()}\n\nPlease analyze this X-ray and return a detailed report."
+        },
+        {
+            "role": "user",
+            "content": {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_url,
+                    "detail": "high"
                 }
-            ]
+            }
         }
     ],
     temperature=0.6,
@@ -128,4 +129,5 @@ async def upload_image(
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
 
