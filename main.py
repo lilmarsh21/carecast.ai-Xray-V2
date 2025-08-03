@@ -41,7 +41,7 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 SECRET_KEY = os.getenv("UPLOAD_SECRET_KEY")
 
-# 🚀 FastAPI app setup
+# 🚀 FastAPI setup
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -50,6 +50,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 🧠 Session storage
+last_reports = {}
 
 # ✅ Upload endpoint
 @app.post("/upload/")
@@ -77,16 +80,15 @@ async def upload_image(
         if image is None:
             return JSONResponse(status_code=400, content={"error": "Invalid image file."})
 
-        # Encode to base64 for OpenAI
         _, buffer = cv2.imencode('.png', image)
         image_base64 = base64.b64encode(buffer).decode("utf-8")
         image_url = f"data:image/png;base64,{image_base64}"
 
-        # Prompt
         system_prompt = (
             "You are a highly experienced clinical radiologist specializing in the interpretation of X-rays, ultrasounds, MRIs, and other medical imaging. "
             "Your responsibility is to perform a comprehensive, high-detail analysis of the image provided, identifying all relevant abnormalities, patterns, and clinical indicators — including subtle or borderline findings. "
-            "You must always respond with a fully structured diagnostic report, even in cases where the image appears normal, incomplete, or of low quality. Do not provide disclaimers such as 'I’m unable to analyze this image.' Instead, deliver your best possible assessment based on available data. "
+            "You must always respond with a fully structured diagnostic report, even in cases where the image appears normal, incomplete, or of low quality. "
+            "Do not provide disclaimers such as 'I'm unable to analyze this image.' Instead, deliver your best possible assessment based on available data. "
             "Structure your report using the following required sections: "
             "- **Findings** – A clear and itemized summary of all observed image features, including measurements, densities, anomalies, and any regions of interest. "
             "- **Impression** – A concise diagnostic interpretation or suspected condition based on the findings. "
@@ -96,7 +98,6 @@ async def upload_image(
             "Always end your response with the following disclaimer: This report is created by CareCast.AI. Please consult a licensed medical professional for final diagnosis and treatment."
         )
 
-        # ✅ GPT-4o request
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -106,7 +107,7 @@ async def upload_image(
                     "content": [
                         {
                             "type": "text",
-                            "text": f"Patient metadata:\n{user_meta.strip()}\n\nPlease analyze the scan and generate a full diagnostic report."
+                            "text": f"Patient metadata:\n{user_meta.strip()}\n\nPlease analyze this medical scan and generate a diagnostic report."
                         },
                         {
                             "type": "image_url",
@@ -124,6 +125,7 @@ async def upload_image(
 
         result = response.choices[0].message.content
         session_id = str(uuid.uuid4())
+        last_reports[session_id] = result
         overlayed_image = apply_heatmap_overlay(image)
 
         return {
@@ -134,3 +136,38 @@ async def upload_image(
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+# ✅ Follow-up endpoint
+@app.post("/followup/")
+async def follow_up(
+    session_id: str = Form(...),
+    question: str = Form(...),
+    x_api_key: str = Header(...)
+):
+    if x_api_key != SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    if session_id not in last_reports:
+        return JSONResponse(status_code=400, content={"error": "Invalid session ID"})
+
+    previous_report = last_reports[session_id]
+
+    system_prompt = (
+        "You are a clinical radiologist AI following up on a previous diagnostic report. "
+        "Answer the user's follow-up question in a professional and informative tone. "
+        "Use the prior report to support your response."
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            { "role": "system", "content": system_prompt },
+            { "role": "user", "content": f"Previous report:\n{previous_report}" },
+            { "role": "user", "content": f"Follow-up question: {question}" }
+        ],
+        temperature=0.5,
+        max_tokens=1000
+    )
+
+    followup_result = response.choices[0].message.content
+    return { "followup_result": followup_result }
