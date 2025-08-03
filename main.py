@@ -77,7 +77,7 @@ async def upload_image(
         if image is None:
             return JSONResponse(status_code=400, content={"error": "Invalid image file."})
 
-        # Encode to base64
+        # Encode to base64 for OpenAI
         _, buffer = cv2.imencode('.png', image)
         image_base64 = base64.b64encode(buffer).decode("utf-8")
         image_url = f"data:image/png;base64,{image_base64}"
@@ -96,20 +96,17 @@ async def upload_image(
             "Always end your response with the following disclaimer: This report is created by CareCast.AI. Please consult a licensed medical professional for final diagnosis and treatment."
         )
 
-        # GPT-4o call
+        # ✅ GPT-4o request
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
+                { "role": "system", "content": system_prompt },
                 {
                     "role": "user",
                     "content": [
                         {
                             "type": "text",
-                            "text": f"Patient metadata:\n{user_meta.strip()}\n\nPlease analyze this medical scan and generate a diagnostic report."
+                            "text": f"Patient metadata:\n{user_meta.strip()}\n\nPlease analyze the scan and generate a full diagnostic report."
                         },
                         {
                             "type": "image_url",
