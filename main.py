@@ -100,17 +100,19 @@ async def upload_image(
         },
         {
             "role": "user",
-            "content": f"Patient metadata:\n{user_meta.strip()}\n\nPlease analyze this X-ray and return a detailed report."
-        },
-        {
-            "role": "user",
-            "content": {
-                "type": "image_url",
-                "image_url": {
-                    "url": image_url,
-                    "detail": "high"
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"Patient metadata:\n{user_meta.strip()}\n\nPlease analyze this X-ray and return a detailed report."
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_url,
+                        "detail": "high"
+                    }
                 }
-            }
+            ]
         }
     ],
     temperature=0.6,
@@ -129,5 +131,6 @@ async def upload_image(
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
 
 
