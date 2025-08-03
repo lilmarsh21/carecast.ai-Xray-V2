@@ -76,48 +76,56 @@ async def upload_image(
             np_arr = np.frombuffer(image_data, np.uint8)
             image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-        if image is None:
-            return JSONResponse(status_code=400, content={"error": "Invalid image file."})
+        if image is None or image.size == 0:
+            return JSONResponse(status_code=400, content={"error": "Unable to decode image file."})
 
-        _, buffer = cv2.imencode('.png', image)
+        # Encode image to PNG base64
+        success, buffer = cv2.imencode('.png', image)
+        if not success:
+            return JSONResponse(status_code=500, content={"error": "Image encoding failed."})
+
         image_base64 = base64.b64encode(buffer).decode("utf-8")
         image_url = f"data:image/png;base64,{image_base64}"
 
-        # 🔎 System prompt
         system_prompt = (
-            "You are a clinical radiologist analyzing the patient's X-ray and metadata together. "
-            "Give a clear and structured diagnostic report using both. Return the following:\n\n"
-            "- **Findings**\n- **Impression**\n- **Explanation**\n- **Recommended Care Plan**"
+    "You are a highly experienced clinical radiologist specializing in the interpretation of X-rays, ultrasounds, MRIs, and other medical imaging. "
+    "Your responsibility is to perform a comprehensive, high-detail analysis of the medical image provided, using both the image and the patient metadata to identify all relevant abnormalities, patterns, and clinical indicators — including subtle or borderline findings. "
+    "You must always respond with a fully structured diagnostic report, even in cases where the image appears normal, incomplete, or of low quality. "
+    "Do not provide disclaimers such as 'I’m unable to analyze this image.' Instead, deliver your best possible assessment based on available data.\n\n"
+
+    "Structure your report using the following required sections:\n"
+    "- **Findings** – A clear and itemized summary of all observed image features, including measurements, densities, anomalies, and any regions of interest.\n"
+    "- **Impression** – A concise diagnostic interpretation or suspected condition based on the findings.\n"
+    "- **Explanation** – A deeper clinical rationale for the impression, referencing both anatomical/pathological details and the patient's metadata.\n"
+    "- **Recommended Care Plan** – Next steps for clinical follow-up, such as additional imaging, referrals, or urgent care if warranted.\n\n"
+
+    "If image quality is limited or obscured, still provide a cautious but informative assessment based on visible regions.\n\n"
+    "Always end your response with the following disclaimer:\n"
+    "**This report is created by CareCast.AI. Please consult a licensed medical professional for final diagnosis and treatment.**"
+)
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Patient metadata:\n{user_meta.strip()}\n\nPlease analyze this X-ray."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": image_url, "detail": "high"}
+                        }
+                    ]
+                }
+            ],
+            temperature=0.6,
+            max_tokens=3000
         )
 
-        # 🧠 GPT-4o response
-        response = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[
-        {
-            "role": "system",
-            "content": system_prompt
-        },
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": f"Patient metadata:\n{user_meta.strip()}\n\nPlease analyze this X-ray and return a detailed report."
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": image_url,
-                        "detail": "high"
-                    }
-                }
-            ]
-        }
-    ],
-    temperature=0.6,
-    max_tokens=3000
-)
         result = response.choices[0].message.content
         session_id = str(uuid.uuid4())
         last_reports[session_id] = result
@@ -131,6 +139,7 @@ async def upload_image(
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
 
 
 
